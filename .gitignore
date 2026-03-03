@@ -1,0 +1,29 @@
+# Ignore vault folder
+xmr/vault/
+xmr/file/
+
+# Ignore all GPG encrypted files
+*.gpg
+
+# exept specific important GPG files
+!bak.asc.gpg
+
+# Ignore backup scripts or temp files
+*.bak
+*.swp
+*.tmp
+
+# Ignore termux backup script if you want
+
+# Node/npm artifacts (kalau ada)
+
+# Database files
+*.db
+
+# WiFi data
+wifi/wifi.json
+utils/wa-gojek
+utils/wa-shopee
+
+# Global config (contains personal values)
+others/config

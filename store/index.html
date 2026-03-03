@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Warung Mbak Ningsih</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        :root { --agen-color: #2563eb; --toko-color: #059669; --danger: #dc2626; --bg: #f3f4f6; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg); padding: 10px; margin: 0; }
+        
+        .tabs { display: flex; max-width: 800px; margin: 0 auto 10px; gap: 5px; }
+        .tab { flex: 1; padding: 12px; text-align: center; cursor: pointer; background: #e5e7eb; border-radius: 8px 8px 0 0; font-weight: bold; transition: 0.3s; }
+        .tab.active-agen { background: var(--agen-color); color: white; }
+        .tab.active-toko { background: var(--toko-color); color: white; }
+
+        .container { max-width: 800px; margin: auto; background: white; padding: 20px; border-radius: 0 0 12px 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); box-sizing: border-box; }
+        .header-toko { text-align: center; display: none; margin-bottom: 20px; border-bottom: 2px dashed #ccc; padding-bottom: 10px; }
+        .header-toko h1 { margin: 0; color: #1f2937; }
+        
+        /* Form & Input */
+        .input-grid { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 10px; margin-bottom: 20px; align-items: end; }
+        .form-group { position: relative; }
+        label { display: block; font-size: 12px; font-weight: bold; margin-bottom: 5px; }
+        input { width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; box-sizing: border-box; }
+        
+        .suggestion-box { position: absolute; background: white; border: 1px solid #d1d5db; width: 100%; z-index: 100; max-height: 150px; overflow-y: auto; display: none; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .suggestion-item { padding: 10px; cursor: pointer; border-bottom: 1px solid #f3f4f6; font-size: 14px; }
+        
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th { background: #f9fafb; padding: 10px; border-bottom: 2px solid #e5e7eb; text-align: left; }
+        td { padding: 10px; border-bottom: 1px solid #e5e7eb; }
+        .tr-total { background: #fefce8; font-weight: bold; }
+        
+        .btn { padding: 10px; border-radius: 6px; cursor: pointer; border: none; font-weight: bold; width: 100%; margin-top: 10px; color: white; }
+        .btn-add { background: #1f2937; }
+        .btn-download { background: var(--toko-color); }
+        .btn-del { color: var(--danger); background: none; font-weight: bold; cursor: pointer; border: none; }
+
+        @media (max-width: 600px) { .input-grid { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+
+<div class="tabs no-print">
+    <div id="tabAgen" class="tab active-agen" onclick="switchMode('agen')">🛒 MODE AGEN</div>
+    <div id="tabToko" class="tab" onclick="switchMode('toko')">🏪 MODE TOKO</div>
+</div>
+
+<div class="container" id="captureArea">
+    <div id="headerToko" class="header-toko">
+        <h1>WARUNG MBAK NINGSIH</h1>
+        <p id="tglStruk" style="font-size: 12px; margin: 5px 0;"></p>
+    </div>
+
+    <h2 id="titleMode" style="text-align:center; margin-top:0;">List Belanja Agen</h2>
+
+    <div class="input-grid no-print">
+        <div class="form-group">
+            <label>Nama Produk</label>
+            <input type="text" id="prodName" placeholder="Cari/Input Produk..." autocomplete="off">
+            <div id="suggestions" class="suggestion-box"></div>
+        </div>
+        <div class="form-group">
+            <label>Harga (Rp)</label>
+            <input type="number" id="prodPrice" placeholder="0">
+        </div>
+        <div class="form-group">
+            <label>Jumlah</label>
+            <input type="number" id="prodQty" value="1" min="1">
+        </div>
+        <button class="btn btn-add" onclick="addToTable()">Tambah</button>
+    </div>
+
+    <div style="overflow-x: auto;">
+        <table>
+            <thead>
+                <tr>
+                    <th>Nama</th>
+                    <th>Harga</th>
+                    <th>Qty</th>
+                    <th>Total</th>
+                    <th class="no-print"></th>
+                </tr>
+            </thead>
+            <tbody id="cartTable"></tbody>
+            <tfoot>
+                <tr class="tr-total">
+                    <td colspan="3" style="text-align: right;">Grand Total:</td>
+                    <td id="grandTotal">0</td>
+                    <td class="no-print"></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+</div>
+
+<div class="no-print" style="max-width: 800px; margin: 10px auto;">
+    <button class="btn btn-download" onclick="downloadImage()">📸 Download Gambar (PNG)</button>
+    <button class="btn" style="background:#9ca3af;" onclick="resetTable()">🔄 Reset List Tabel</button>
+</div>
+
+<script>
+    let currentMode = 'agen';
+    let cart = [];
+
+    function switchMode(mode) {
+        currentMode = mode;
+        const tabAgen = document.getElementById('tabAgen');
+        const tabToko = document.getElementById('tabToko');
+        const headerToko = document.getElementById('headerToko');
+        const titleMode = document.getElementById('titleMode');
+
+        cart = [];
+        renderTable();
+
+        if (mode === 'agen') {
+            tabAgen.className = 'tab active-agen';
+            tabToko.className = 'tab';
+            headerToko.style.display = 'none';
+            titleMode.innerText = 'List Belanja Agen';
+            titleMode.style.display = 'block';
+        } else {
+            tabToko.className = 'tab active-toko';
+            tabAgen.className = 'tab';
+            headerToko.style.display = 'block';
+            titleMode.style.display = 'none';
+            document.getElementById('tglStruk').innerText = new Date().toLocaleString('id-ID');
+        }
+    }
+
+    function getDBKey() { return currentMode === 'agen' ? 'masterStok' : 'masterStok_Jual'; }
+
+    const nameInput = document.getElementById('prodName');
+    const priceInput = document.getElementById('prodPrice');
+    const qtyInput = document.getElementById('prodQty');
+    const suggestBox = document.getElementById('suggestions');
+
+    nameInput.addEventListener('input', () => {
+        const db = JSON.parse(localStorage.getItem(getDBKey())) || [];
+        const val = nameInput.value.toLowerCase();
+        suggestBox.innerHTML = '';
+        
+        if (val.length > 0) {
+            const matches = db.filter(i => i.name.toLowerCase().includes(val));
+            matches.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'suggestion-item';
+                div.innerText = `${item.name} (@Rp${item.price})`;
+                div.onclick = () => {
+                    nameInput.value = item.name;
+                    priceInput.value = item.price;
+                    suggestBox.style.display = 'none';
+                };
+                suggestBox.appendChild(div);
+            });
+            suggestBox.style.display = matches.length ? 'block' : 'none';
+        } else { suggestBox.style.display = 'none'; }
+    });
+
+    function addToTable() {
+        const name = nameInput.value.trim();
+        const price = parseInt(priceInput.value);
+        const qty = parseInt(qtyInput.value);
+        if (!name || !price) return alert("Isi data dulu!");
+
+        let db = JSON.parse(localStorage.getItem(getDBKey())) || [];
+        const idx = db.findIndex(i => i.name.toLowerCase() === name.toLowerCase());
+        if (idx === -1) db.push({name, price}); else db[idx].price = price;
+        localStorage.setItem(getDBKey(), JSON.stringify(db));
+
+        cart.push({name, price, qty, total: price * qty});
+        renderTable();
+        nameInput.value = ''; priceInput.value = ''; qtyInput.value = 1;
+        nameInput.focus();
+    }
+
+    function renderTable() {
+        const tbody = document.getElementById('cartTable');
+        tbody.innerHTML = '';
+        let gt = 0;
+        cart.forEach((item, i) => {
+            gt += item.total;
+            tbody.innerHTML += `<tr>
+                <td>${item.name}</td>
+                <td>${item.price.toLocaleString('id-ID')}</td>
+                <td>${item.qty}</td>
+                <td>${item.total.toLocaleString('id-ID')}</td>
+                <td class="no-print"><button class="btn-del" onclick="cart.splice(${i},1);renderTable()">×</button></td>
+            </tr>`;
+        });
+        document.getElementById('grandTotal').innerText = gt.toLocaleString('id-ID');
+    }
+
+    function resetTable() { if(confirm("Hapus list tabel?")) { cart = []; renderTable(); } }
+
+    async function downloadImage() {
+        const area = document.getElementById('captureArea');
+        const elementsToHide = document.querySelectorAll('.no-print');
+        
+        // Sembunyiin semua elemen no-print
+        elementsToHide.forEach(el => {
+            el.setAttribute('data-old-display', el.style.display);
+            el.style.setProperty('display', 'none', 'important');
+        });
+        
+        // Kasih delay dikit biar browser sempet update tampilan
+        await new Promise(r => setTimeout(r, 100));
+
+        const canvas = await html2canvas(area, {
+            scale: 2,
+            backgroundColor: "#ffffff",
+            logging: false
+        });
+
+        const link = document.createElement('a');
+        link.download = `${currentMode === 'agen' ? 'Belanja' : 'Struk'}-${Date.now()}.png`;
+        link.href = canvas.toDataURL("image/png");
+        link.click();
+        
+        // Balikin lagi tampilannya
+        elementsToHide.forEach(el => {
+            el.style.display = el.getAttribute('data-old-display') || '';
+        });
+    }
+
+    document.addEventListener('click', (e) => { if(e.target !== nameInput) suggestBox.style.display = 'none'; });
+</script>
+</body>
+</html>

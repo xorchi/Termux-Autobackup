@@ -1,0 +1,16 @@
+# Termux-Autobackup Global Config
+# Copy this file to others/config and fill in your values
+# cp others/config.example others/config
+
+# GPG recipient — your GPG key name or fingerprint
+# Example: GPG_RECIPIENT="yourname" or GPG_RECIPIENT="D9AC18D5..."
+GPG_RECIPIENT=""
+
+# Cloud server (utils/cloud-server.sh)
+# Port for FileBrowser
+CLOUD_PORT="8080"
+# Directory to expose
+CLOUD_STORAGE="/sdcard"
+
+# GitHub username (for utils/repo-list.sh)
+GITHUB_USERNAME=""

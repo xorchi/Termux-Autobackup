@@ -1,0 +1,3 @@
+dns.adguard-dns.com
+dns.nextdns.io
+p2.freedns.controld.com

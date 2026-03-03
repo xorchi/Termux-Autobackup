@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+export COLUMNS LINES
+echo -e "\e[4 q"
+export GPG_TTY=$(tty)
+seed
