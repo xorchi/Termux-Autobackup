@@ -10,7 +10,7 @@ A personal utility repository for Termux — a collection of scripts and tools f
 
 ```bash
 pkg install git
-git clone https://github.com/Rovikin/Termux-Autobackup
+git clone https://github.com/xorchi/Termux-Autobackup
 cd Termux-Autobackup
 cp others/config.example others/config
 # Edit others/config and fill in your values
