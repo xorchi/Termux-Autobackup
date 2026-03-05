@@ -599,21 +599,25 @@ def run_projection(data):
             f"    Range    : ${bot_range[0]:,.0f}  -  ${bot_range[1]:,.0f}"
         )
 
-    siklus_ath_prev  = str(int(next_cycle) - 1)
-    siklus_bot_curr  = str(int(next_cycle))
-    siklus_ath_next  = str(int(next_cycle) + 1)
+    # Penomoran siklus yang benar:
+    # Siklus N = Top(N-1) → Bottom(N) → ATH(N)
+    # ATH 2025 menutup Siklus 3, membuka Siklus 4.
+    # Bottom saat ini = Bottom Siklus 4.
+    # ATH berikutnya  = ATH Siklus 4 (bukan 5).
+    siklus_prev = str(int(next_cycle) - 1)
+    siklus_curr = str(int(next_cycle))
 
     print(f"""
-  {bold('ATH Siklus ' + siklus_ath_prev + ' (Terkonfirmasi)')}
+  {bold('ATH Penutup Siklus ' + siklus_prev + ' (Terkonfirmasi)')}
     Tanggal  : {yellow(ct_date)}
     Harga    : {yellow('$'+f'{ct_price:,.2f}')}
 
-  {bold('Bottom Siklus ' + siklus_bot_curr)}  [{bot_status}]
+  {bold('Bottom Siklus ' + siklus_curr)}  [{bot_status}]
     Tanggal  : {green(c_bot_date)}
     Harga    : {green('$'+f'{c_bot_price:,.2f}')}
 {bot_detail}
 
-  {bold('Estimasi ATH Siklus ' + siklus_ath_next)}
+  {bold('Estimasi ATH Siklus ' + siklus_curr)}
     Tanggal  : {green(c_top_date)}
     Harga    : {green('~$'+f'{c_top_price:,.0f}')}
     Jarak Bot: ~{int(round(c_days_bt))} hari
@@ -787,3 +791,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
