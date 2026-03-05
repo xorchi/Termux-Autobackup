@@ -20,8 +20,9 @@ xmr/file/
 # Database files
 *.db
 
-# WiFi data
-wifi/wifi.json
+# json file
+*.json
+# whatsapp autochat templates for online driver
 utils/wa-gojek
 utils/wa-shopee
 

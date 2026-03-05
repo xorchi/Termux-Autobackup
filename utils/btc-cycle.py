@@ -1,16 +1,26 @@
 #!/usr/bin/env python3
 """
 =======================================================================
-  BTC CYCLE PROJECTION v3
+  BTC CYCLE PROJECTION
   Pure Python — zero external dependency (stdlib only)
   Compatible: Python 3.6+, Termux armeabi-v7a
 
-  PERUBAHAN dari v2:
-  - Pairing siklus berbasis KRONOLOGI, bukan indeks array
-    (robust terhadap jumlah tops/bottoms yang tidak simetris)
-  - Validasi data: deteksi entri yang tidak membentuk siklus valid
-  - Peringatan jika ada entri "orphan" (tidak berpasangan)
-  - Default data diperbarui sesuai koreksi pengguna
+  Fitur utama:
+  - Pairing siklus berbasis KRONOLOGI (robust terhadap data asimetris)
+  - Validasi data otomatis dengan peringatan entri mencurigakan
+  - Konsensus berbobot R² — metode dengan akurasi lebih tinggi
+    mendapat pengaruh lebih besar terhadap hasil proyeksi
+  - Deteksi otomatis: bottom terkonfirmasi vs estimasi
+  - Data tersimpan permanen di btc_data.json
+
+  Catatan data default:
+  - Top 2017-12-17: $19,666 adalah high sekaligus close candle bulanan
+    Bitstamp (tidak ada wick di atas). $19,798.68 adalah harga Binance,
+    bukan wick pada candle yang sama.
+  - Top 2011-06-08 $31.91 (MtGox intraday high) membentuk Siklus 1 bersama
+    Bottom 2011-10-20 $2.00 dan Top 2013-11-30 $1,163.00 (Bitstamp).
+    Catatan: siklus ini menggunakan exchange berbeda (MtGox), likuiditas
+    sangat tipis, sehingga bobotnya dalam regresi patut dipertimbangkan.
 =======================================================================
   Data disimpan di: btc_data.json (otomatis dibuat jika belum ada)
   Jalankan: python3 btc_cycle_v3.py
@@ -26,35 +36,22 @@ from datetime import date, datetime, timedelta
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_FILE  = os.path.join(SCRIPT_DIR, "btc_data.json")
 
-# ──────────────────────────────────────────────────────────────────────
-# DATA DEFAULT
-# Struktur siklus yang benar (kronologis):
-#   Siklus 1: Top Nov2013 → Bottom Jan2015 → Top Des2017
-#   Siklus 2: Top Des2017 → Bottom Des2018 → Top Nov2021
-#   Siklus 3: Top Nov2021 → Bottom Nov2022 → Top Okt2025
-#
-# Catatan:
-#   - Bottom Okt2011 ($2) disimpan di "pre_bottoms" karena tidak ada
-#     Top sebelumnya dalam dataset ini. Ia tidak dipakai untuk
-#     kalkulasi siklus, hanya sebagai referensi historis.
-#   - $19,666 (Des 2017) adalah harga CLOSE bulanan ATH Des 2017,
-#     bukan bottom — jangan masukkan ke array bottoms.
-# ──────────────────────────────────────────────────────────────────────
 DEFAULT_DATA = {
     "tops": [
+        {"date": "2011-06-08", "price": 31.91,    "note": "MtGox"},
         {"date": "2013-11-30", "price": 1163.00,   "note": "Bitstamp"},
-        {"date": "2017-12-17", "price": 19798.68,  "note": "Bitstamp (wick high)"},
-        {"date": "2021-11-10", "price": 69000.00,  "note": "Binance"},
+        {"date": "2017-12-17", "price": 19666,  "note": "Bitstamp"},
+        {"date": "2021-11-10", "price": 69000.00,  "note": "Bitstamp"},
         {"date": "2025-10-05", "price": 126272.00, "note": "Bitstamp"},
     ],
     "bottoms": [
+        {"date": "2011-10-20", "price": 2.00, "note": "Bitstamp"},
         {"date": "2015-01-14", "price": 152.00,    "note": "Bitstamp"},
-        {"date": "2018-12-15", "price": 3122.00,   "note": "Bitstamp"},
-        {"date": "2022-11-21", "price": 15479.00,  "note": "Binance"},
+        {"date": "2018-12-15", "price": 3122.00, "note": "Bitstamp"},
+        {"date": "2022-11-21", "price": 15479.00,  "note": "Bitstamp"},
     ],
     "notes": [
-        "Bottom pra-siklus: 2011-10-20 $2.00 (Bitstamp) — tidak ada Top sebelumnya, tidak dipakai untuk kalkulasi siklus.",
-        "$19,666 (2017-12-17) adalah harga close bulanan ATH Des 2017, bukan Bottom."
+
     ]
 }
 
@@ -129,6 +126,35 @@ def log_regression_predict(x, y, x_pred):
     """Fit ln(y) ~ linear, berguna untuk diminishing returns."""
     log_y = [math.log(max(yi, 1e-9)) for yi in y]
     slope, intercept, r_sq = linregress(x, log_y)
+    return math.exp(slope * x_pred + intercept), r_sq
+
+def weighted_log_regression_predict(x, y, x_pred):
+    """
+    Log regression dengan bobot recency — siklus terbaru lebih dominan.
+    Bobot = indeks siklus (1, 2, 3, ..., n), siklus terakhir mendapat
+    bobot n× lebih besar dari siklus pertama.
+    Ini mencegah Siklus 1 yang ekstrem mendistorsi proyeksi secara
+    berlebihan, dan memastikan tren terkini lebih tercermin.
+    """
+    n = len(x)
+    weights = [float(i + 1) for i in range(n)]  # bobot: 1, 2, 3, ..., n
+    log_y = [math.log(max(yi, 1e-9)) for yi in y]
+
+    # Weighted means
+    total_w = sum(weights)
+    mx = sum(w * xi for w, xi in zip(weights, x)) / total_w
+    my = sum(w * yi for w, yi in zip(weights, log_y)) / total_w
+
+    # Weighted OLS
+    ss_xx = sum(w * (xi - mx) ** 2 for w, xi in zip(weights, x))
+    ss_xy = sum(w * (xi - mx) * (yi - my) for w, xi, yi in zip(weights, x, log_y))
+    ss_yy = sum(w * (yi - my) ** 2 for w, yi in zip(weights, log_y))
+
+    if ss_xx == 0:
+        return math.exp(my), 0.0
+    slope     = ss_xy / ss_xx
+    intercept = my - slope * mx
+    r_sq      = (ss_xy ** 2) / (ss_xx * ss_yy) if ss_yy != 0 else 0.0
     return math.exp(slope * x_pred + intercept), r_sq
 
 def median(arr):
@@ -310,10 +336,14 @@ def show_cycles(data):
         pct_g_str = green(f"+{cy['pct_g']:.0f}%")
         pb_bar    = ascii_bar(cy["d_pb"], max_pb, 22)
         bt_bar    = ascii_bar(cy["d_bt"], max_bt, 22)
+        # Tandai siklus yang menggunakan data MtGox (berbeda exchange)
+        t1_note = cy["t1"].get("note", "")
+        is_mtgox = "MtGox" in t1_note or "MtGox" in cy["b"].get("note", "")
+        mtgox_flag = yellow("  [!] data MtGox — beda exchange") if is_mtgox else ""
         siklus_label = bold("Siklus " + str(cy["num"]))
         span = cy["t1"]["date"] + " → " + cy["b"]["date"] + " → " + cy["t2"]["date"]
-        print(f"\n  {siklus_label}  ({span})")
-        print(f"    ATH Awal  : ${cy['t1']['price']:>12,.2f}  [{cy['t1'].get('note','')}]")
+        print(f"\n  {siklus_label}  ({span}){mtgox_flag}")
+        print(f"    ATH Awal  : ${cy['t1']['price']:>12,.2f}  [{t1_note}]")
         print(f"    Bottom    : ${cy['b']['price']:>12,.2f}  "
               f"({pct_d_str} dalam {cy['d_pb']} hari)")
         print(f"    ATH Baru  : ${cy['t2']['price']:>12,.2f}  "
@@ -393,10 +423,17 @@ def run_projection(data):
     sl3, ic3, bt_r2 = linregress(cyc_nums, d_bt_arr)
     bt_linreg   = max(300.0, sl3 * next_cycle + ic3)
 
-    # Bottom→Top: % gain — diminishing returns → log regression dominan
+    # Bottom→Top: % gain — diminishing returns → weighted log regression
+    # Siklus terbaru mendapat bobot lebih besar agar tren terkini lebih dominan
     gain_simple   = mean(pct_g_arr)
     gain_weighted = weighted_mean(pct_g_arr)
-    gain_logreg, gain_lr2 = log_regression_predict(cyc_nums, pct_g_arr, next_cycle)
+    gain_logreg, gain_lr2 = weighted_log_regression_predict(cyc_nums, pct_g_arr, next_cycle)
+
+    # Hard cap: proyeksi gain% tidak boleh melebihi gain% siklus terakhir.
+    # Ini memastikan tren diminishing returns selalu terjaga — proyeksi
+    # tidak bisa lebih optimistis dari realita siklus paling baru.
+    last_cycle_gain = pct_g_arr[-1]
+    gain_logreg = min(gain_logreg, last_cycle_gain)
 
     # ──────────────────────────────────────────────────────────────────
     # KONSENSUS BERBOBOT R²
@@ -444,12 +481,12 @@ def run_projection(data):
     ])
     c_days_bt = max(300.0, c_days_bt)
 
-    # % Gain (log regression mendominasi jika R² tinggi)
-    c_pct_gain = r2_weighted_avg([
-        (gain_simple,   W_SIMPLE),
-        (gain_weighted, W_WEIGHTED),
-        (gain_logreg,   max(0.01, gain_lr2)),
-    ])
+    # % Gain: gunakan log regression secara eksklusif sebagai konsensus.
+    # Rata-rata sederhana/tertimbang tidak memodelkan tren diminishing
+    # returns — dengan 4+ siklus, rentang gain (136%–18000%) membuat
+    # mean tidak bermakna. Log regresi (R²=0.99) adalah satu-satunya
+    # metode yang menangkap tren penurunan gain secara eksponensial.
+    c_pct_gain = gain_logreg
 
     # ── Tampilkan Tren Historis ──
     header(f"METRIK & TREN SIKLUS HISTORIS  ({len(cycles)} siklus valid)")
@@ -551,9 +588,10 @@ def run_projection(data):
         bot_range = (min(e[2] for e in bot_estimates), max(e[2] for e in bot_estimates))
 
     # ── Output: Proyeksi ATH ──
-    ath_cycle_num = int(next_cycle + 1) if not bottom_is_confirmed else int(next_cycle + 1)
+    # Siklus N = Top(N-1) → Bottom(N) → ATH(N)
+    # ATH berikutnya adalah penutup siklus yang sama dengan bottomnya.
     bot_label = "Terkonfirmasi" if bottom_is_confirmed else "Estimasi"
-    header(f"PROYEKSI ATH — SIKLUS {ath_cycle_num}")
+    header(f"PROYEKSI ATH — SIKLUS {int(next_cycle)}")
     print(f"\n  Bottom ({bot_label}) : {green(c_bot_date)}  ~${green(f'{c_bot_price:,.0f}')}\n")
     print(f"  {'Metode':<34} {'Bobot':>6}  {'Hari':>5}  {'Gain%':>9}  {'Harga Est.':>14}")
     sep()
@@ -576,11 +614,29 @@ def run_projection(data):
     c_top_date  = add_days(c_bot_date, int(round(c_days_bt)))
     c_top_price = c_bot_price * (1 + c_pct_gain / 100)
     sep()
-    print(f"  {bold(yellow('* KONSENSUS (bobot R2)')):<44} "
+    print(f"  {bold(yellow('* KONSENSUS (log regresi)')):<44} "
           f"{int(round(c_days_bt)):>5}  "
           f"{c_pct_gain:>8.0f}%  {green('$'+f'{c_top_price:,.0f}')}")
     print(f"  {gray('  Tanggal estimasi: '+c_top_date)}")
-    top_range = (min(e[2] for e in top_estimates), max(e[2] for e in top_estimates))
+    # Range ATH: hanya dari metode yang bermakna (log regresi).
+    # Rata-rata sederhana/tertimbang menghasilkan angka tidak realistis
+    # sehingga tidak digunakan sebagai batas range.
+    # Range dihitung dari interval ±1 standar deviasi gain% historis
+    # di sekitar proyeksi log regresi.
+    if len(pct_g_arr) >= 2:
+        import statistics as _st
+        gain_std = _st.stdev(pct_g_arr)
+        # Cap std agar tidak terlalu lebar — gunakan max 50% dari gain_logreg
+        gain_std_capped = min(gain_std, abs(gain_logreg) * 0.50)
+        top_low  = max(0.0, gain_logreg - gain_std_capped)
+        top_high = min(last_cycle_gain, gain_logreg + gain_std_capped)
+    else:
+        top_low  = gain_logreg * 0.75
+        top_high = gain_logreg * 1.25
+    top_range = (
+        c_bot_price * (1 + top_low  / 100),
+        c_bot_price * (1 + top_high / 100),
+    )
 
     # ── Ringkasan ──
     header("RINGKASAN PROYEKSI")
@@ -769,7 +825,7 @@ def print_menu(data):
 
 def main():
     data = load_data()
-    header("BTC CYCLE PROJECTION v3  |  Pure Python  |  stdlib only")
+    header("BTC CYCLE PROJECTION  |  Pure Python  |  zero dependency")
     print(gray(f"  Data file: {DATA_FILE}\n"))
 
     while True:
@@ -791,4 +847,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
