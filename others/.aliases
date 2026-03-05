@@ -215,6 +215,7 @@ alias stok='cd ~/Termux-Autobackup/store && p -m http.server && cd ~/'
 alias xml-translator='python ~/Termux-Autobackup/utils/translate.py'
 alias node-info='p ~/Termux-Autobackup/utils/node-info.py'
 alias gitlog="git log --graph --pretty=format:'%C(yellow)%h%Creset -%C(auto)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit"
+alias cycle='cd ~/Termux-Autobackup/utils/ && p btc-cycle.py && cd ~/'
 
 # autostart
 export COLUMNS LINES
