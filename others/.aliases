@@ -176,7 +176,7 @@ alias open="termux-open"
 
 # <-- My Custom aliases -->
 #~/xmr
-alias xmr='~/Termux-Autobackup/utils/xmr.sh'
+alias xmr='~/Termux-Autobackup/xmr/main.sh'
 
 # ~/utils
 alias enc='clear && ~/Termux-Autobackup/utils/enc.sh'
