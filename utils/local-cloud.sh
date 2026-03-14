@@ -11,13 +11,14 @@ fi
 
 source "$CONFIG"
 
-if [[ -z "${LOCAL_PORT:-}" || -z "${LOCAL_STORAGE:-}" ]]; then
-    echo "[ERROR] LOCAL_PORT or LOCAL_STORAGE not set in others/config." >&2
+if [[ -z "${LOCAL_PORT:-}" || -z "${LOCAL_STORAGE:-}" || -z "${LOCAL_GATEWAY:-}" ]]; then
+    echo "[ERROR] LOCAL_PORT, LOCAL_STORAGE, or LOCAL_GATEWAY not set in others/config." >&2
     exit 1
 fi
 
 PORT="$LOCAL_PORT"
 STORAGE="$LOCAL_STORAGE"
+GATEWAY="$LOCAL_GATEWAY"
 
 echo "--- STARTING LOCAL SERVER ---"
 
@@ -25,8 +26,23 @@ echo "--- STARTING LOCAL SERVER ---"
 pkill filebrowser
 sleep 1
 
-# 2. Dapatkan IP lokal
-LOCAL_IP=$(ip addr show | grep 'inet ' | grep -v '127.0.0.1' | awk '{print $2}' | cut -d'/' -f1 | head -n 1)
+# 2. Dapatkan IP lokal via Python (kompatibel Termux non-root)
+LOCAL_IP=$(python3 -c "
+import socket
+try:
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.connect(('$GATEWAY', 80))
+    print(s.getsockname()[0])
+    s.close()
+except Exception:
+    print('')
+")
+
+if [[ -z "$LOCAL_IP" ]]; then
+    echo "[ERROR] Tidak dapat mendeteksi IP lokal. Periksa LOCAL_GATEWAY di config." >&2
+    exit 1
+fi
+
 URL="http://$LOCAL_IP:$PORT"
 
 # 3. Start FileBrowser
