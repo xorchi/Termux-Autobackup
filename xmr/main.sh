@@ -2,16 +2,7 @@
 set -euo pipefail
 
 VAULT_SRC="/data/data/com.termux/files/usr/var/vault"
-BACKUP_DIR="$HOME/Termux-Autobackup/xmr"
-VAULT_DEST="$BACKUP_DIR/vault"
-WORKDIR="$BACKUP_DIR/file"
-
-# ─── Leftover check ───────────────────────────────────────────
-
-if [[ -d "$WORKDIR" ]]; then
-    echo "[WARN] Leftover from previous session found. Cleaning up..." >&2
-    rm -rf "$WORKDIR"
-fi
+WORKDIR="$HOME/Termux-Autobackup/xmr"
 
 # ─── Trap ─────────────────────────────────────────────────────
 
@@ -20,35 +11,22 @@ _ENCRYPTED=0
 _exit_guard() {
     if [[ $_ENCRYPTED -eq 0 ]]; then
         echo "[WARN] Script exited before encryption. Cleaning up..." >&2
-        rm -rf "$VAULT_DEST" "$WORKDIR"
+        rm -f "$WORKDIR/$WALLET_NAME" "$WORKDIR/$WALLET_NAME.keys"
     fi
 }
 
 trap '_exit_guard' EXIT
 trap 'exit 1' INT TERM
 
-# ─── Vault init ───────────────────────────────────────────────
-
-if [[ -f "$WORKDIR/xorchi" && -f "$WORKDIR/xorchi.keys" ]]; then
-    :
-elif [[ -d "$VAULT_DEST" ]]; then
-    :
-elif [[ -d "$VAULT_SRC" ]]; then
-    cp -r "$VAULT_SRC" "$BACKUP_DIR/"
-else
-    echo "[FATAL] Vault not found. Run setup.sh first." >&2
-    exit 1
-fi
-
 # ─── Load config ──────────────────────────────────────────────
 
-if [[ ! -f "$VAULT_DEST/config" ]]; then
-    echo "[FATAL] Config file not found at $VAULT_DEST/config." >&2
+if [[ ! -f "$VAULT_SRC/config" ]]; then
+    echo "[FATAL] Config file not found at $VAULT_SRC/config." >&2
     exit 1
 fi
 
 # shellcheck source=/dev/null
-source "$VAULT_DEST/config"
+source "$VAULT_SRC/config"
 
 if [[ -z "${WALLET_NAME:-}" || -z "${GPG_RECIPIENT:-}" \
    || -z "${NODE_CLEARNET:-}" || -z "${NODE_ONION:-}" ]]; then
@@ -59,12 +37,19 @@ fi
 WALLET_FILE="$WORKDIR/$WALLET_NAME"
 MONERO_BIN=$(command -v monero-wallet-cli || true)
 
+# ─── Leftover check ───────────────────────────────────────────
+
+if [[ -f "$WORKDIR/$WALLET_NAME" || -f "$WORKDIR/$WALLET_NAME.keys" ]]; then
+    echo "[WARN] Leftover from previous session found. Cleaning up..." >&2
+    rm -f "$WORKDIR/$WALLET_NAME" "$WORKDIR/$WALLET_NAME.keys"
+fi
+
 # ─── Functions ────────────────────────────────────────────────
 
 _check_monero() {
     if [[ -z "$MONERO_BIN" ]]; then
         echo "[WARN] monero-wallet-cli not found." >&2
-        read -rp "Install sekarang? (y/n) " yn
+        read -rp "Install now? (y/n) " yn
         if [[ "$yn" == "y" ]]; then
             pkg install monero -y
             MONERO_BIN=$(command -v monero-wallet-cli || true)
@@ -80,13 +65,12 @@ _check_monero() {
 
 decrypt() {
     local gpgdir="$HOME/.gnupg"
-    local max_retries=1
 
     mkdir -p "$WORKDIR"
 
     _decrypt_once() {
-        gpg --yes -d -o "$WORKDIR/$WALLET_NAME"      "$VAULT_DEST/$WALLET_NAME.gpg"
-        gpg --yes -d -o "$WORKDIR/$WALLET_NAME.keys" "$VAULT_DEST/$WALLET_NAME.keys.gpg"
+        gpg --yes -d -o "$WORKDIR/$WALLET_NAME"      "$VAULT_SRC/$WALLET_NAME.gpg"
+        gpg --yes -d -o "$WORKDIR/$WALLET_NAME.keys" "$VAULT_SRC/$WALLET_NAME.keys.gpg"
     }
 
     _fix_gpg() {
@@ -101,7 +85,7 @@ decrypt() {
     until _decrypt_once; do
         i=$((i+1))
         echo "[WARN] Decrypt attempt $i failed." >&2
-        if [[ $i -le $max_retries ]]; then
+        if [[ $i -le 1 ]]; then
             _fix_gpg
             continue
         fi
@@ -111,10 +95,9 @@ decrypt() {
 }
 
 encrypt() {
-    mkdir -p "$VAULT_DEST"
     local opts=(--batch --yes --trust-model always --encrypt --recipient "$GPG_RECIPIENT")
-    gpg "${opts[@]}" -o "$VAULT_DEST/$WALLET_NAME.gpg"      "$WORKDIR/$WALLET_NAME"
-    gpg "${opts[@]}" -o "$VAULT_DEST/$WALLET_NAME.keys.gpg" "$WORKDIR/$WALLET_NAME.keys"
+    gpg "${opts[@]}" -o "$VAULT_SRC/$WALLET_NAME.gpg"      "$WORKDIR/$WALLET_NAME"
+    gpg "${opts[@]}" -o "$VAULT_SRC/$WALLET_NAME.keys.gpg" "$WORKDIR/$WALLET_NAME.keys"
 }
 
 run_monero() {
@@ -200,15 +183,9 @@ case "$choice" in
 esac
 
 encrypt
-echo "[✓] Wallet file encrypted."
+echo "[+] Wallet encrypted."
 
 _ENCRYPTED=1
 trap - EXIT INT TERM
 
-if [[ -d "$VAULT_DEST" ]]; then
-    rm -rf "$VAULT_SRC"
-    mv "$VAULT_DEST" "$VAULT_SRC"
-fi
-
-rm -rf "$WORKDIR"
-
+rm -f "$WORKDIR/$WALLET_NAME" "$WORKDIR/$WALLET_NAME.keys"
