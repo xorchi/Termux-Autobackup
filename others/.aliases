@@ -210,12 +210,14 @@ alias la='ls -a'
 alias pass='~/Termux-Autobackup/utils/pass.py'
 alias user='python ~/Termux-Autobackup/utils/username.py'
 alias debian='proot-distro login debian'
-alias cloud='~/Termux-Autobackup/utils/cloud-server.sh'
+alias cloud='cd ~/ && ~/Termux-Autobackup/utils/cloud-server.sh'
+alias cloudl='cd ~/ && Termux-Autobackup/utils/local-cloud.sh'
 alias stok='cd ~/Termux-Autobackup/store && p -m http.server && cd ~/'
 alias xml-translator='python ~/Termux-Autobackup/utils/translate.py'
 alias node-info='p ~/Termux-Autobackup/utils/node-info.py'
 alias gitlog="git log --graph --pretty=format:'%C(yellow)%h%Creset -%C(auto)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit"
 alias cycle='cd ~/Termux-Autobackup/utils/ && p btc-cycle.py && cd ~/'
+alias install-debian='sh ~/Termux-Autobackup/utils/install-debian.sh'
 
 # autostart
 export COLUMNS LINES

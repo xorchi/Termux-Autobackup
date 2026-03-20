@@ -173,8 +173,8 @@ if [[ ! -f "$WORKDIR/$WALLET_NAME" || ! -f "$WORKDIR/$WALLET_NAME.keys" ]]; then
     decrypt
 fi
 
-read -rp "> " choice
-
+#read -rp "> " choice
+choice=1
 case "$choice" in
     1) run_monero tor      ;;
     2) run_monero clearnet ;;
