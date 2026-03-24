@@ -4,7 +4,7 @@
 
 # GPG recipient — your GPG key name or fingerprint
 # Example: GPG_RECIPIENT="yourname" or GPG_RECIPIENT="D9AC18D5..."
-GPG_RECIPIENT=""
+GPG_RECIPIENT="your-GPG-ID-or-fingerprint"
 
 # Cloud server (utils/cloud-server.sh)
 # Port for FileBrowser
@@ -13,4 +13,4 @@ CLOUD_PORT="8080"
 CLOUD_STORAGE="/sdcard"
 
 # GitHub username (for utils/repo-list.sh)
-GITHUB_USERNAME=""
+GITHUB_USERNAME="your-github-username"
