@@ -1,30 +1,8 @@
-# Ignore vault folder
-xmr/vault/
-xmr/file/
-
-# Ignore all GPG encrypted files
 *.gpg
-
-# exept specific important GPG files
 !bak.asc.gpg
-
-# Ignore backup scripts or temp files
 *.bak
 *.swp
 *.tmp
-
-# Ignore termux backup script if you want
-
-# Node/npm artifacts (kalau ada)
-
-# Database files
 *.db
-
-# json file
 *.json
-# whatsapp autochat templates for online driver
-utils/wa-gojek
-utils/wa-shopee
-
-# Global config (contains personal values)
 others/config
