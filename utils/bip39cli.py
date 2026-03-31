@@ -247,7 +247,7 @@ def _xmr_subaddr(view_sec, spend_pub, major, minor):
     spend_sub=_ed_point_encode(D)
     v_int=int.from_bytes(view_sec,'little')
     view_sub=_ed_point_encode(_ed_mul(v_int,D))
-    return _xmr_addr(spend_sub,view_sub,network=0x42)
+    return _xmr_addr(spend_sub,view_sub,network=42)  # 42 decimal = 0x2a
 
 # ── Monero seed encoding ──────────────────────────────────
 def _xmr_encode25(spend32):
@@ -287,6 +287,12 @@ def _xmr_validate25(seed25):
     if _MONERO_IDX[ws[24]]!=expected:
         return False,"Invalid checksum"
     return True,"Valid"
+
+def _xmr_validate_offset_words(words):
+    """Check all offset words exist in Monero wordlist."""
+    bad=[w for w in words if w not in _MONERO_IDX]
+    if bad: return False, f"Not in Monero wordlist: {', '.join(bad)}"
+    return True, "ok"
 
 def _xmr_apply_offset(seed25, passphrase_words):
     """Apply Monero native passphrase offset."""
@@ -528,30 +534,32 @@ def do_derive_bip39(phrase, pp, coin, count, mode):
     elif coin=='xmr':
         do_monero_from_bip39(phrase, pp)
 
-def _do_show_xmr(spend_sec, header='Monero'):
+def _do_show_xmr(spend_sec, header='Monero', subaddr_count=1):
     """Show Monero addresses and seed from a spend secret key."""
     _,view_sec,spend_pub,view_pub=_xmr_keys_from_spend(spend_sec)
     primary=_xmr_addr(spend_pub,view_pub)
-    subaddr=_xmr_subaddr(view_sec,spend_pub,0,1)
     seed25=_xmr_encode25(spend_sec)
     if header: _hr(header)
     _row('Spend pub',spend_pub.hex())
     _row('View pub',view_pub.hex())
     print()
-    _row('Primary',primary)
-    _row('Subaddr (0,1)',subaddr)
+    _row('Primary addr',primary)
+    for i in range(1, subaddr_count+1):
+        sub=_xmr_subaddr(view_sec,spend_pub,0,i)
+        _row(f'Subaddr (0,{i})',sub)
     print()
     print("  Seed (25 words):")
     print(f"  {seed25}")
     _hr()
 
-def do_derive_xmr25(seed25, offset_words=None):
+def do_derive_xmr25(seed25, offset_words=None, subaddr_count=1):
     """Derive Monero addresses from a 25-word Monero seed."""
     ok,msg=_xmr_validate25(seed25)
     if not ok: print(f"  Error: {msg}"); return
     spend_sec=_xmr_decode25(seed25)
-    # Apply offset passphrase if provided
     if offset_words:
+        ok_off,msg_off=_xmr_validate_offset_words(offset_words)
+        if not ok_off: print(f"  Error: {msg_off}"); return
         actual_seed=_xmr_apply_offset(seed25,offset_words)
         ok2,msg2=_xmr_validate25(actual_seed)
         if not ok2: print(f"  Error in offset seed: {msg2}"); return
@@ -559,11 +567,11 @@ def do_derive_xmr25(seed25, offset_words=None):
         _hr('Monero (offset passphrase)')
         print(f"  Offset seed:")
         print(f"  {actual_seed}\n")
-        _do_show_xmr(spend_sec, header=None)
+        _do_show_xmr(spend_sec, header=None, subaddr_count=subaddr_count)
     else:
-        _do_show_xmr(spend_sec, 'Monero')
+        _do_show_xmr(spend_sec, 'Monero', subaddr_count=subaddr_count)
 
-def do_monero_from_bip39(phrase, bip39_pp='', offset_words=None):
+def do_monero_from_bip39(phrase, bip39_pp='', offset_words=None, subaddr_count=1):
     """Convert BIP39 mnemonic to Monero keys."""
     ok,msg=_bip39_validate(phrase)
     if not ok: print(f"  Error: {msg}"); return
@@ -572,15 +580,17 @@ def do_monero_from_bip39(phrase, bip39_pp='', offset_words=None):
     spend_sec=_sc_reduce32(_keccak256(k))
     seed25_base=_xmr_encode25(spend_sec)
     if offset_words:
+        ok_off,msg_off=_xmr_validate_offset_words(offset_words)
+        if not ok_off: print(f"  Error: {msg_off}"); return
         seed25=_xmr_apply_offset(seed25_base,offset_words)
         ok2,_=_xmr_validate25(seed25)
         if ok2: spend_sec=_xmr_decode25(seed25)
         _hr('Monero from BIP39 (offset)')
         print(f"  Base seed  : {seed25_base}")
         print(f"  Offset seed: {seed25}\n")
-        _do_show_xmr(spend_sec, header=None)
+        _do_show_xmr(spend_sec, header=None, subaddr_count=subaddr_count)
     else:
-        _do_show_xmr(spend_sec, 'Monero from BIP39')
+        _do_show_xmr(spend_sec, 'Monero from BIP39', subaddr_count=subaddr_count)
 
 # ════════════════════════════════════════════════════════
 # CLI HANDLERS
@@ -619,10 +629,10 @@ def cli_derive(args):
         else: i+=1
     mtype=_detect_mnemonic(phrase)
     if mtype=='xmr25':
-        do_derive_xmr25(phrase, offset_words)
+        do_derive_xmr25(phrase, offset_words, subaddr_count=count)
     elif mtype=='bip39':
         if coin=='xmr':
-            do_monero_from_bip39(phrase, pp, offset_words)
+            do_monero_from_bip39(phrase, pp, offset_words, subaddr_count=count)
         else:
             do_derive_bip39(phrase, pp, coin, count, mode)
     else:
@@ -630,14 +640,16 @@ def cli_derive(args):
 
 def cli_monero(args):
     if not args: sys.exit("Error: provide BIP39 mnemonic")
-    phrase=args[0]; bip39_pp=''; offset_words=None
+    phrase=args[0]; bip39_pp=''; offset_words=None; count=1
     i=1
     if i<len(args) and not args[i].startswith('--'): bip39_pp=args[i]; i+=1
     while i<len(args):
         if args[i]=='--passphrase' and i+1<len(args):
             offset_words=args[i+1].strip().lower().split(); i+=2
+        elif args[i]=='--count' and i+1<len(args):
+            count=int(args[i+1]); i+=2
         else: i+=1
-    do_monero_from_bip39(phrase, bip39_pp, offset_words)
+    do_monero_from_bip39(phrase, bip39_pp, offset_words, subaddr_count=count)
 
 # ════════════════════════════════════════════════════════
 # INTERACTIVE MODE
@@ -681,32 +693,41 @@ def interactive():
                 mode=['all','taproot','segwit','wrapped','legacy'][mi]
             else:
                 mode='all'
-            if coin not in ('xmr',):
-                try: count=int(_ask("Number of addresses [5]") or '5')
-                except ValueError: count=5
-            else:
-                count=1
+            try: count=int(_ask("Number of addresses [5]" if coin!='xmr' else "Number of subaddresses [1]") or ('5' if coin!='xmr' else '1'))
+            except ValueError: count=5 if coin!='xmr' else 1
             if coin=='xmr':
-                do_monero_from_bip39(p,pp)
+                do_monero_from_bip39(p,pp,subaddr_count=count)
             else:
                 do_derive_bip39(p,pp,coin,count,mode)
         elif idx==5:
             p=_ask("Enter Monero 25-word seed")
+            try: sc=int(_ask("Number of subaddresses [1]") or '1')
+            except ValueError: sc=1
             use_offset=_choose("Apply offset passphrase?",['No','Yes'])
             offset_words=None
             if use_offset==1:
-                raw=_ask("Offset passphrase (space-separated Monero words)")
-                offset_words=raw.strip().lower().split()
-            do_derive_xmr25(p,offset_words)
+                while True:
+                    raw=_ask("Offset passphrase (space-separated Monero words)")
+                    ow=raw.strip().lower().split()
+                    ok_off,msg_off=_xmr_validate_offset_words(ow)
+                    if ok_off: offset_words=ow; break
+                    print(f"  Error: {msg_off}. Try again.")
+            do_derive_xmr25(p,offset_words,subaddr_count=sc)
         elif idx==6:
             p=_ask("Enter BIP39 mnemonic")
             pp=_ask("BIP39 passphrase (leave blank for none)")
+            try: sc=int(_ask("Number of subaddresses [1]") or '1')
+            except ValueError: sc=1
             use_offset=_choose("Apply Monero offset passphrase?",['No','Yes'])
             offset_words=None
             if use_offset==1:
-                raw=_ask("Offset passphrase (space-separated Monero words)")
-                offset_words=raw.strip().lower().split()
-            do_monero_from_bip39(p,pp,offset_words)
+                while True:
+                    raw=_ask("Offset passphrase (space-separated Monero words)")
+                    ow=raw.strip().lower().split()
+                    ok_off,msg_off=_xmr_validate_offset_words(ow)
+                    if ok_off: offset_words=ow; break
+                    print(f"  Error: {msg_off}. Try again.")
+            do_monero_from_bip39(p,pp,offset_words,subaddr_count=sc)
         elif idx==7:
             print("  Goodbye.")
             break
