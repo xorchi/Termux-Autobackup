@@ -219,6 +219,7 @@ alias gitlog="git log --graph --pretty=format:'%C(yellow)%h%Creset -%C(auto)%d%C
 alias cycle='cd ~/Termux-Autobackup/utils/ && p btc-cycle.py && cd ~/'
 alias install-debian='sh ~/Termux-Autobackup/utils/install-debian.sh'
 alias bip39='python ~/Termux-Autobackup/utils/bip39cli.py'
+alias btc='python ~/Termux-Autobackup/utils/generate_segwit_address.py'
 
 # autostart
 export COLUMNS LINES
