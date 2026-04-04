@@ -221,6 +221,7 @@ alias install-debian='sh ~/Termux-Autobackup/utils/install-debian.sh'
 alias bip39='python ~/Termux-Autobackup/utils/bip39cli.py'
 alias btc='python ~/Termux-Autobackup/utils/generate_segwit_address.py'
 alias btcaddr='python ~/Termux-Autobackup/utils/generate_segwit_address.py "$(cat $PREFIX/var/vault/btc.pub)" --count 1 --start 5'
+alias xmr-supply='python ~/Termux-Autobackup/utils/xmr_supply_calculator.py'
 
 # autostart
 export COLUMNS LINES
