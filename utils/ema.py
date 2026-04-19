@@ -19,8 +19,8 @@ BASE_URL    = "https://api.binance.com"
 
 STABLECOINS = {
     "USDT","USDC","BUSD","DAI","TUSD","USDP","USDD","GUSD",
-    "FRAX","LUSD","SUSD","EURS","XAUT","PAXG","FDUSD","PYUSD",
-    "USDE","USDS","USDX","UST","USTC"
+    "FRAX","LUSD","SUSD","EURS","XAUT","FDUSD","PYUSD",
+    "USDE","USDS","USDX","UST","USTC", "USD1", "EUR"
 }
 
 # --- Helpers ---
