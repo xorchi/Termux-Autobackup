@@ -224,6 +224,8 @@ alias btcaddr='python ~/Termux-Autobackup/utils/generate_segwit_address.py "$(ca
 alias xmr-supply='python ~/Termux-Autobackup/utils/xmr_supply_calculator.py'
 alias vault='cd $PREFIX/var/vault'
 alias ema='python ~/Termux-Autobackup/utils/ema.py'
+alias remote='~/Termux-Autobackup/utils/git-remote.sh'
+alias polyseed='python ~/Termux-Autobackup/utils/polyseed.py'
 
 # autostart
 export COLUMNS LINES
