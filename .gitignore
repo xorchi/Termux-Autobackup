@@ -6,3 +6,4 @@
 *.db
 *.json
 others/config
+__pycache__
