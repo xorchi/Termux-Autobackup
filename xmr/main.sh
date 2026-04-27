@@ -173,12 +173,17 @@ if [[ ! -f "$WORKDIR/$WALLET_NAME" || ! -f "$WORKDIR/$WALLET_NAME.keys" ]]; then
     decrypt
 fi
 
-echo "Select mode to run monero-wallet-cli:"
-echo "1) Tor (onion node)"
-echo "2) Clearnet (clearnet node)"
-echo "3) Offline (no network)"
-read -rp "Your choice: " choice
-#choice=1
+#-------------------------------------
+# This is the setting for selecting the wallet's running mode. You can remove the "#" from the five lines below and add a "#" in the "choice=1" line.
+
+#echo "Select mode to run monero-wallet-cli:"
+#echo "1) Tor (onion node)"
+#echo "2) Clearnet (clearnet node)"
+#echo "3) Offline (no network)"
+#read -rp "Your choice: " choice
+#-------------------------------------
+
+choice=1
 case "$choice" in
     1) run_monero tor      ;;
     2) run_monero clearnet ;;
