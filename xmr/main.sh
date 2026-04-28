@@ -167,29 +167,39 @@ _run_tor() {
 
 # ─── Main ─────────────────────────────────────────────────────
 
+_usage() {
+    cat <<EOF
+Usage: xmr [OPTION]
+
+Run monero-wallet-cli with encrypted wallet via vault.
+
+Options:
+  -c, --clearnet   Run using clearnet node
+  -o, --offline    Run in offline mode
+  -h, --help       Show this help message
+
+Default (no flag): Run via Tor (onion node)
+EOF
+    exit 0
+}
+
+MODE="tor"
+
+case "${1:-}" in
+    -c|--clearnet) MODE="clearnet" ;;
+    -o|--offline)  MODE="offline"  ;;
+    -h|--help)     _usage          ;;
+    "")            MODE="tor"      ;;
+    *) echo "[ERROR] Unknown flag: ${1}" >&2; _usage ;;
+esac
+
 _check_monero
 
 if [[ ! -f "$WORKDIR/$WALLET_NAME" || ! -f "$WORKDIR/$WALLET_NAME.keys" ]]; then
     decrypt
 fi
 
-#-------------------------------------
-# This is the setting for selecting the wallet's running mode. You can remove the "#" from the five lines below and add a "#" in the "choice=1" line.
-
-#echo "Select mode to run monero-wallet-cli:"
-#echo "1) Tor (onion node)"
-#echo "2) Clearnet (clearnet node)"
-#echo "3) Offline (no network)"
-#read -rp "Your choice: " choice
-#-------------------------------------
-
-choice=1
-case "$choice" in
-    1) run_monero tor      ;;
-    2) run_monero clearnet ;;
-    3) run_monero offline  ;;
-    *) echo "[ERROR] Invalid choice." >&2; exit 1 ;;
-esac
+run_monero "$MODE"
 
 encrypt
 echo "[+] Wallet encrypted."
@@ -198,3 +208,4 @@ _ENCRYPTED=1
 trap - EXIT INT TERM
 
 rm -f "$WORKDIR/$WALLET_NAME" "$WORKDIR/$WALLET_NAME.keys"
+
