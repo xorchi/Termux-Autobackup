@@ -1,141 +1,166 @@
 #!/usr/bin/env bash
+# =============================================================================
+#  xmr — Monero wallet launcher with GPG-encrypted vault
+#  Final version — merged best of all three versions
+# =============================================================================
 set -euo pipefail
+
+# ─── Paths ────────────────────────────────────────────────────────────────────
 
 VAULT_SRC="/data/data/com.termux/files/usr/var/vault"
 WORKDIR="$HOME/Termux-Autobackup/xmr"
 
-# ─── Trap ─────────────────────────────────────────────────────
+# ─── Logging helpers ──────────────────────────────────────────────────────────
+
+_log()   { printf '[%s] +     %s\n' "$(date '+%H:%M:%S')" "$*"; }
+_warn()  { printf '[%s] WARN  %s\n' "$(date '+%H:%M:%S')" "$*" >&2; }
+_fatal() { printf '[%s] FATAL %s\n' "$(date '+%H:%M:%S')" "$*" >&2; exit 1; }
+
+# ─── Trap / cleanup ───────────────────────────────────────────────────────────
 
 _ENCRYPTED=0
 
-_exit_guard() {
+_cleanup() {
     if [[ $_ENCRYPTED -eq 0 ]]; then
-        echo "[WARN] Script exited before encryption. Cleaning up..." >&2
-        rm -f "$WORKDIR/$WALLET_NAME" "$WORKDIR/$WALLET_NAME.keys"
+        _warn "Script exited before encryption. Cleaning up plaintext wallet..."
+        rm -f "$WORKDIR/${WALLET_NAME:-}" "$WORKDIR/${WALLET_NAME:-}.keys"
     fi
 }
 
-trap '_exit_guard' EXIT
-trap 'exit 1' INT TERM
+trap '_cleanup' EXIT
+trap 'exit 1'   INT TERM
 
-# ─── Load config ──────────────────────────────────────────────
+# ─── Load & validate config ───────────────────────────────────────────────────
 
-if [[ ! -f "$VAULT_SRC/config" ]]; then
-    echo "[FATAL] Config file not found at $VAULT_SRC/config." >&2
-    exit 1
-fi
+[[ -f "$VAULT_SRC/config" ]] \
+    || _fatal "Config file not found at $VAULT_SRC/config."
 
 # shellcheck source=/dev/null
 source "$VAULT_SRC/config"
 
-if [[ -z "${WALLET_NAME:-}" || -z "${GPG_RECIPIENT:-}" \
-   || -z "${NODE_CLEARNET:-}" || -z "${NODE_ONION:-}" ]]; then
-    echo "[FATAL] Config is invalid or incomplete." >&2
-    exit 1
-fi
+for _var in WALLET_NAME GPG_RECIPIENT NODE_CLEARNET NODE_ONION; do
+    [[ -n "${!_var:-}" ]] || _fatal "Config variable \$$_var is missing or empty."
+done
 
 WALLET_FILE="$WORKDIR/$WALLET_NAME"
 MONERO_BIN=$(command -v monero-wallet-cli || true)
 
-# ─── Leftover check ───────────────────────────────────────────
+# ─── Leftover check ───────────────────────────────────────────────────────────
 
-if [[ -f "$WORKDIR/$WALLET_NAME" || -f "$WORKDIR/$WALLET_NAME.keys" ]]; then
-    echo "[WARN] Leftover from previous session found. Cleaning up..." >&2
-    rm -f "$WORKDIR/$WALLET_NAME" "$WORKDIR/$WALLET_NAME.keys"
+if [[ -f "$WALLET_FILE" || -f "$WALLET_FILE.keys" ]]; then
+    _warn "Leftover plaintext wallet from a previous session found. Removing..."
+    rm -f "$WALLET_FILE" "$WALLET_FILE.keys"
 fi
 
-# ─── Functions ────────────────────────────────────────────────
+# ─── Functions ────────────────────────────────────────────────────────────────
 
 _check_monero() {
-    if [[ -z "$MONERO_BIN" ]]; then
-        echo "[WARN] monero-wallet-cli not found." >&2
-        read -rp "Install now? (y/n) " yn
-        if [[ "$yn" == "y" ]]; then
-            pkg install monero -y
-            MONERO_BIN=$(command -v monero-wallet-cli || true)
-            if [[ -z "$MONERO_BIN" ]]; then
-                echo "[FATAL] Installation failed." >&2
-                exit 1
-            fi
-        else
-            exit 1
-        fi
-    fi
+    [[ -n "$MONERO_BIN" ]] && return 0
+
+    _warn "monero-wallet-cli not found."
+    read -rp "Install now? (y/n) " _yn
+    [[ "$_yn" == "y" ]] || _fatal "monero-wallet-cli required. Aborting."
+
+    pkg install monero -y
+    MONERO_BIN=$(command -v monero-wallet-cli || true)
+    [[ -n "$MONERO_BIN" ]] || _fatal "Installation failed. monero-wallet-cli still not found."
+}
+
+# Validasi file vault sebelum dekripsi
+_check_vault_files() {
+    [[ -f "$VAULT_SRC/$WALLET_NAME.gpg" ]]      || _fatal "Vault file not found: $VAULT_SRC/$WALLET_NAME.gpg"
+    [[ -f "$VAULT_SRC/$WALLET_NAME.keys.gpg" ]] || _fatal "Vault file not found: $VAULT_SRC/$WALLET_NAME.keys.gpg"
+}
+
+_gpg_decrypt_pair() {
+    gpg --yes -d -o "$WALLET_FILE"      "$VAULT_SRC/$WALLET_NAME.gpg"
+    gpg --yes -d -o "$WALLET_FILE.keys" "$VAULT_SRC/$WALLET_NAME.keys.gpg"
+}
+
+_gpg_fix_agent() {
+    local gpgdir="$HOME/.gnupg"
+    gpgconf --kill gpg-agent                              || true
+    rm -f "$gpgdir"/*.lock "$gpgdir"/.#lock* 2>/dev/null || true
+    chmod 700 "$gpgdir"                   2>/dev/null     || true
+    gpgconf --launch gpg-agent                            || true
+    sleep 0.5
 }
 
 decrypt() {
-    local gpgdir="$HOME/.gnupg"
-
+    _check_vault_files
     mkdir -p "$WORKDIR"
 
-    _decrypt_once() {
-        gpg --yes -d -o "$WORKDIR/$WALLET_NAME"      "$VAULT_SRC/$WALLET_NAME.gpg"
-        gpg --yes -d -o "$WORKDIR/$WALLET_NAME.keys" "$VAULT_SRC/$WALLET_NAME.keys.gpg"
-    }
-
-    _fix_gpg() {
-        gpgconf --kill gpg-agent || true
-        rm -f "$gpgdir"/*.lock "$gpgdir"/.#lock* 2>/dev/null || true
-        chmod 700 "$gpgdir" 2>/dev/null || true
-        gpgconf --launch gpg-agent || true
-        sleep 0.5
-    }
-
-    local i=0
-    until _decrypt_once; do
-        i=$((i+1))
-        echo "[WARN] Decrypt attempt $i failed." >&2
-        if [[ $i -le 1 ]]; then
-            _fix_gpg
-            continue
+    local attempt
+    for attempt in 1 2; do
+        if _gpg_decrypt_pair; then
+            return 0
         fi
-        echo "[FATAL] Decrypt failed after retries." >&2
-        exit 1
+        _warn "Decrypt attempt $attempt failed."
+        if [[ $attempt -eq 1 ]]; then
+            _log "Attempting GPG agent repair..."
+            _gpg_fix_agent
+        fi
     done
+
+    _fatal "Decryption failed after retries. Check your GPG key or passphrase."
 }
 
+# Atomic encrypt: tulis ke .tmp dulu, baru mv — vault tidak corrupt jika gagal
 encrypt() {
     local opts=(--batch --yes --trust-model always --encrypt --recipient "$GPG_RECIPIENT")
-    gpg "${opts[@]}" -o "$VAULT_SRC/$WALLET_NAME.gpg"      "$WORKDIR/$WALLET_NAME"
-    gpg "${opts[@]}" -o "$VAULT_SRC/$WALLET_NAME.keys.gpg" "$WORKDIR/$WALLET_NAME.keys"
+    local tmp1="$VAULT_SRC/$WALLET_NAME.gpg.tmp"
+    local tmp2="$VAULT_SRC/$WALLET_NAME.keys.gpg.tmp"
+
+    gpg "${opts[@]}" -o "$tmp1" "$WALLET_FILE"      || { rm -f "$tmp1" "$tmp2"; _fatal "Encryption failed (wallet)."; }
+    gpg "${opts[@]}" -o "$tmp2" "$WALLET_FILE.keys" || { rm -f "$tmp1" "$tmp2"; _fatal "Encryption failed (keys)."; }
+
+    mv -f "$tmp1" "$VAULT_SRC/$WALLET_NAME.gpg"
+    mv -f "$tmp2" "$VAULT_SRC/$WALLET_NAME.keys.gpg"
+
+    _ENCRYPTED=1
+    _log "Wallet re-encrypted to vault."
 }
 
-run_monero() {
-    local base_opts=(
-        "--wallet-file" "$WALLET_FILE"
-        "--log-file"    "/dev/null"
-        "--log-level"   "0"
-    )
+# ─── Tor readiness check ──────────────────────────────────────────────────────
 
-    case "$1" in
-        clearnet)
-            "$MONERO_BIN" "${base_opts[@]}" \
-                --daemon-address "$NODE_CLEARNET" \
-                --trusted-daemon
-            ;;
-        offline)
-            "$MONERO_BIN" "${base_opts[@]}" --offline
-            ;;
-        tor)
-            _run_tor "${base_opts[@]}"
-            ;;
-    esac
+_tor_ready() {
+    local tor_log="$HOME/.local/share/tor/log.txt"
+
+    # Method 1: bootstrap log
+    if [[ -f "$tor_log" ]] && grep -q "Bootstrapped 100%" "$tor_log" 2>/dev/null; then
+        return 0
+    fi
+
+    # Method 2: TCP probe via /dev/tcp (bash built-in)
+    if { echo > /dev/tcp/127.0.0.1/9050; } 2>/dev/null \
+    || { echo > /dev/tcp/127.0.0.1/9150; } 2>/dev/null; then
+        return 0
+    fi
+
+    # Method 3: netcat fallback
+    if command -v nc >/dev/null 2>&1; then
+        nc -z 127.0.0.1 9050 2>/dev/null || nc -z 127.0.0.1 9150 2>/dev/null && return 0
+    fi
+
+    return 1
 }
 
 _run_tor() {
     local base_opts=("$@")
     local tor_log="$HOME/.local/share/tor/log.txt"
-    local timeout=30
+    local timeout=60
 
-    if ! command -v tor >/dev/null 2>&1; then
-        echo "[FATAL] tor: not found." >&2
-        exit 2
-    fi
+    command -v tor >/dev/null 2>&1 || _fatal "tor: not installed. Run: pkg install tor"
 
-    pgrep -x tor >/dev/null 2>&1 || {
-        mkdir -p "$(dirname "$tor_log")"
+    mkdir -p "$(dirname "$tor_log")"
+
+    if ! pgrep -x tor >/dev/null 2>&1; then
+        truncate -s 0 "$tor_log" 2>/dev/null || true
         tor > "$tor_log" 2>&1 &
-    }
+        _log "Tor started (PID $!). Waiting for bootstrap..."
+    else
+        _log "Tor already running. Waiting for readiness..."
+    fi
 
     local tor_opts=(
         "${base_opts[@]}"
@@ -144,44 +169,66 @@ _run_tor() {
         "--trusted-daemon"
     )
 
-    for _ in $(seq 1 "$timeout"); do
-        if [[ -f "$tor_log" ]] && grep -q "Bootstrapped 100%" "$tor_log" 2>/dev/null; then
-            "$MONERO_BIN" "${tor_opts[@]}"; return
-        fi
-        if (echo > /dev/tcp/127.0.0.1/9050) >/dev/null 2>&1 \
-        || (echo > /dev/tcp/127.0.0.1/9150) >/dev/null 2>&1; then
-            "$MONERO_BIN" "${tor_opts[@]}"; return
-        fi
-        if command -v nc >/dev/null 2>&1; then
-            if nc -z 127.0.0.1 9050 >/dev/null 2>&1 \
-            || nc -z 127.0.0.1 9150 >/dev/null 2>&1; then
-                "$MONERO_BIN" "${tor_opts[@]}"; return
-            fi
+    local i=0
+    while [[ $i -lt $timeout ]]; do
+        if _tor_ready; then
+            _log "Tor is ready. Launching wallet..."
+            "$MONERO_BIN" "${tor_opts[@]}"
+            return
         fi
         sleep 1
+        i=$((i+1))
     done
 
-    echo "[ERROR] Tor timeout." >&2
-    exit 1
+    _fatal "Tor bootstrap timed out after ${timeout}s."
 }
 
-# ─── Main ─────────────────────────────────────────────────────
+# ─── Monero launcher ──────────────────────────────────────────────────────────
+
+run_monero() {
+    local mode="$1"
+    local base_opts=(
+        "--wallet-file" "$WALLET_FILE"
+        "--log-file"    "/dev/null"
+        "--log-level"   "0"
+    )
+
+    case "$mode" in
+        clearnet)
+            _log "Connecting via clearnet: $NODE_CLEARNET"
+            "$MONERO_BIN" "${base_opts[@]}" \
+                --daemon-address "$NODE_CLEARNET" \
+                --trusted-daemon
+            ;;
+        offline)
+            _log "Running in offline mode."
+            "$MONERO_BIN" "${base_opts[@]}" --offline
+            ;;
+        tor)
+            _run_tor "${base_opts[@]}"
+            ;;
+    esac
+}
+
+# ─── Usage ────────────────────────────────────────────────────────────────────
 
 _usage() {
     cat <<EOF
-Usage: xmr [OPTION]
+Usage: $(basename "$0") [OPTION]
 
 Run monero-wallet-cli with encrypted wallet via vault.
 
 Options:
-  -c, --clearnet   Run using clearnet node
-  -o, --offline    Run in offline mode
+  -c, --clearnet   Connect using clearnet node
+  -o, --offline    Run in offline mode (no sync)
   -h, --help       Show this help message
 
-Default (no flag): Run via Tor (onion node)
+Default (no flag): Connect via Tor (onion node)
 EOF
     exit 0
 }
+
+# ─── Main ─────────────────────────────────────────────────────────────────────
 
 MODE="tor"
 
@@ -189,23 +236,22 @@ case "${1:-}" in
     -c|--clearnet) MODE="clearnet" ;;
     -o|--offline)  MODE="offline"  ;;
     -h|--help)     _usage          ;;
-    "")            MODE="tor"      ;;
-    *) echo "[ERROR] Unknown flag: ${1}" >&2; _usage ;;
+    "")            ;;
+    *) _warn "Unknown flag: ${1}"; _usage ;;
 esac
 
 _check_monero
 
-if [[ ! -f "$WORKDIR/$WALLET_NAME" || ! -f "$WORKDIR/$WALLET_NAME.keys" ]]; then
+if [[ ! -f "$WALLET_FILE" || ! -f "$WALLET_FILE.keys" ]]; then
+    _log "Decrypting wallet from vault..."
     decrypt
 fi
 
 run_monero "$MODE"
 
 encrypt
-echo "[+] Wallet encrypted."
 
-_ENCRYPTED=1
 trap - EXIT INT TERM
-
-rm -f "$WORKDIR/$WALLET_NAME" "$WORKDIR/$WALLET_NAME.keys"
+rm -f "$WALLET_FILE" "$WALLET_FILE.keys"
+_log "Done. Plaintext wallet cleared."
 
