@@ -2,7 +2,7 @@
 
 > 🇮🇩 [Baca dalam Bahasa Indonesia](README.id.md)
 
-A personal utility repository for Termux — a collection of scripts and tools for backup, system management, WiFi credential management, Monero wallet handling, and various small utilities. 
+A personal utility repository for Termux — a collection of scripts and tools for backup, system management, WiFi credential management, Monero wallet handling, and various small utilities.
 
 ---
 
