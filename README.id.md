@@ -104,12 +104,12 @@ Wrapper Monero CLI yang diperkeras dengan enkripsi GPG saat tidak digunakan.
 
 **Fitur:**
 - File wallet dienkripsi GPG saat tidak aktif digunakan
-- Mendukung mode Tor, clearnet, dan offline
+- Mendukung mode Tor, clearnet, I2P, dan offline
 - Pembersihan otomatis saat keluar secara tidak normal (SIGINT, SIGTERM)
 - Mendeteksi dan membersihkan file plaintext sisa dari sesi sebelumnya yang crash
 - Berbasis config (tidak ada nama wallet atau alamat node yang hardcoded)
 
-**Kebutuhan:** `monero-wallet-cli`, `gpg`, `tor` (hanya untuk mode Tor)
+**Kebutuhan:** `monero-wallet-cli`, `gpg`, `tor` (hanya untuk mode Tor), `i2pd` (hanya untuk mode I2P)
 
 Direktori `vault/` disimpan permanen di `$PREFIX/var/vault/` dan hanya disalin ke `xmr/vault/` saat runtime berlangsung.
 
@@ -121,15 +121,16 @@ WALLET_NAME="nama_wallet_kamu"
 GPG_RECIPIENT="FINGERPRINT_KUNCI_GPG_KAMU"
 NODE_CLEARNET="host:port"
 NODE_ONION="host.onion:port"
+NODE_I2P="host.b32.i2p:port"
 ```
 
 **Penggunaan:**
 ```bash
-bash xmr/main.sh
-# Kemudian pilih:
-# 1 = Tor
-# 2 = Clearnet
-# 3 = Offline
+xmr        # Default: Tor
+xmr -c     # Clearnet
+xmr -i     # I2P
+xmr -o     # Offline
+xmr -h     # Bantuan
 ```
 
 ---

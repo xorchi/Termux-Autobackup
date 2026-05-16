@@ -25,7 +25,7 @@ trap 'exit 1'   INT TERM
 # shellcheck source=/dev/null
 source "$VAULT_SRC/config"
 
-for _var in WALLET_NAME GPG_RECIPIENT NODE_CLEARNET NODE_ONION; do
+for _var in WALLET_NAME GPG_RECIPIENT NODE_CLEARNET NODE_ONION NODE_I2P; do
     [[ -n "${!_var:-}" ]] || _fatal "Config variable \$$_var is missing or empty."
 done
 
@@ -130,6 +130,41 @@ _run_tor() {
     _fatal "Tor bootstrap timed out after ${timeout}s."
 }
 
+_i2p_ready() {
+    { echo > /dev/tcp/127.0.0.1/4447; } 2>/dev/null && return 0
+    if command -v nc >/dev/null 2>&1; then
+        nc -z 127.0.0.1 4447 2>/dev/null && return 0
+    fi
+    return 1
+}
+
+_run_i2p() {
+    local base_opts=("$@")
+    local timeout=120
+
+    command -v i2pd >/dev/null 2>&1 || _fatal "i2pd not installed. Run: pkg install i2pd"
+
+    if ! pgrep -x i2pd >/dev/null 2>&1; then
+        i2pd --daemon
+    fi
+
+    _warn "Waiting for I2Pd to bootstrap..."
+    local i=0
+    while [[ $i -lt $timeout ]]; do
+        if _i2p_ready; then
+            "$MONERO_BIN" "${base_opts[@]}" \
+                --daemon-address "$NODE_I2P" \
+                --proxy          "127.0.0.1:4447" \
+                --trusted-daemon
+            return
+        fi
+        sleep 1
+        i=$((i+1))
+    done
+
+    _fatal "I2Pd bootstrap timed out after ${timeout}s."
+}
+
 run_monero() {
     local base_opts=(
         "--wallet-file" "$WALLET_FILE"
@@ -143,6 +178,8 @@ run_monero() {
             "$MONERO_BIN" "${base_opts[@]}" --offline ;;
         tor)
             _run_tor "${base_opts[@]}" ;;
+        i2p)
+            _run_i2p "${base_opts[@]}" ;;
     esac
 }
 
@@ -152,6 +189,7 @@ Usage: $(basename "$0") [OPTION]
 
 Options:
   -c, --clearnet   Connect via clearnet node
+  -i, --i2p        Connect via I2P node
   -o, --offline    Run in offline mode
   -h, --help       Show this help
 
@@ -163,6 +201,7 @@ EOF
 MODE="tor"
 case "${1:-}" in
     -c|--clearnet) MODE="clearnet" ;;
+    -i|--i2p)      MODE="i2p"     ;;
     -o|--offline)  MODE="offline"  ;;
     -h|--help)     _usage          ;;
     "")            ;;

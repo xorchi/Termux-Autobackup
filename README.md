@@ -104,12 +104,12 @@ A hardened Monero CLI wallet wrapper with GPG encryption at rest.
 
 **Features:**
 - Wallet files are GPG-encrypted when not in use
-- Supports Tor, clearnet, and offline modes
+- Supports Tor, clearnet, I2P, and offline modes
 - Auto-cleanup on abnormal exit (SIGINT, SIGTERM)
 - Detects and cleans up leftover plaintext files from previous crashed sessions
 - Config-driven (no hardcoded wallet names or node addresses)
 
-**Requirements:** `monero-wallet-cli`, `gpg`, `tor` (Tor mode only)
+**Requirements:** `monero-wallet-cli`, `gpg`, `tor` (Tor mode only), `i2pd` (I2P mode only)
 
 The `vault/` directory lives permanently at `$PREFIX/var/vault/` and is copied to `xmr/vault/` only during runtime.
 
@@ -121,15 +121,16 @@ WALLET_NAME="your_wallet_name"
 GPG_RECIPIENT="YOUR_GPG_KEY_FINGERPRINT"
 NODE_CLEARNET="host:port"
 NODE_ONION="host.onion:port"
+NODE_I2P="host.b32.i2p:port"
 ```
 
 **Usage:**
 ```bash
-bash xmr/main.sh
-# Then select:
-# 1 = Tor
-# 2 = Clearnet
-# 3 = Offline
+xmr        # Default: Tor
+xmr -c     # Clearnet
+xmr -i     # I2P
+xmr -o     # Offline
+xmr -h     # Help
 ```
 
 ---
