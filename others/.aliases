@@ -226,6 +226,8 @@ alias vault='cd $PREFIX/var/vault'
 alias ema='python ~/Termux-Autobackup/utils/ema.py'
 alias remote='~/Termux-Autobackup/utils/git-remote.sh'
 alias polyseed='python ~/Termux-Autobackup/utils/polyseed.py'
+alias cl='history -c && rm ~/.zsh_history'
+alias webserver='bash ~/Termux-Autobackup/utils/webserver.sh'
 
 # autostart
 export COLUMNS LINES

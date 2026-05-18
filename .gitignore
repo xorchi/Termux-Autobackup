@@ -7,3 +7,4 @@
 *.json
 others/config
 utils/__pycache__/
+host/*
